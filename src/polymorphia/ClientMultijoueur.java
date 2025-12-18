@@ -2,112 +2,120 @@ package polymorphia;
 
 import java.io.*;
 import java.net.*;
+import java.util.Scanner;
 
 public class ClientMultijoueur {
+
+    private static final int PORT = 8001;
+
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
-    private Personnage joueur2;
-    private static final int PORT = 12345;
-    
-    public ClientMultijoueur(Personnage joueur2) {
-        this.joueur2 = joueur2;
-    }
-    
+
+    // État affiché (pas de logique métier)
+    private int pvMoi;
+    private int pvAdversaire;
+
     public void connecter(String host) {
         try {
             System.out.println("Connexion au serveur " + host + ":" + PORT + "...");
             socket = new Socket(host, PORT);
-            System.out.println("Connecté au serveur !");
-            
+            System.out.println("✅ Connecté au serveur !");
+
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            
-            // Recevoir les stats du joueur 1
-            Personnage joueur1 = recevoirStats();
-            
-            // Envoyer les stats du joueur 2
-            envoyerStats(joueur2);
-            
-            System.out.println("\n*** Début du combat PvP ***");
-            lancerCombatClient(joueur1, joueur2);
-            
+
+            recevoirStatsServeur();
+            envoyerStatsClient();
+
+            lancerCombat();
+
         } catch (IOException e) {
-            System.err.println("Erreur client: " + e.getMessage());
+            System.err.println("❌ Erreur client : " + e.getMessage());
         } finally {
             fermer();
         }
     }
-    
-    private void envoyerStats(Personnage p) throws IOException {
-        out.println(p.getNom());
-        out.println(p.getPointsVie());
-        out.println(p.getAttaque());
-        out.println(p.getDefense());
+
+    /* =========================
+       ÉCHANGE DES STATS
+       ========================= */
+
+    private void recevoirStatsServeur() throws IOException {
+        String nom = in.readLine(); // ignoré côté client
+        pvMoi = Integer.parseInt(in.readLine());
+        in.readLine(); // pv max (inutile côté client)
+        in.readLine(); // attaque
+        in.readLine(); // défense
+
+        System.out.println("🧍 Adversaire connecté. Combat prêt !");
     }
-    
-    private Personnage recevoirStats() throws IOException {
-        String nom = in.readLine();
-        int pv = Integer.parseInt(in.readLine());
-        int att = Integer.parseInt(in.readLine());
-        int def = Integer.parseInt(in.readLine());
-        
-        Personnage p = new Personnage(nom);
-        return p;
+
+    private void envoyerStatsClient() {
+        // Stats simples envoyées au serveur (autorité)
+        out.println("Client");
+        out.println(100);
+        out.println(100);
+        out.println(10);
+        out.println(5);
     }
-    
-    private void lancerCombatClient(Personnage j1, Personnage j2) {
-        try {
-            boolean tourJ1 = true;
-            
-            while (j1.estVivant() && j2.estVivant()) {
-                if (!tourJ1) {
-                    System.out.println("\n--- Votre tour ---");
-                    System.out.print("Action (1=Attaquer): ");
-                    @SuppressWarnings("resource")
-                    String action = new java.util.Scanner(System.in).nextLine();
-                    
-                    out.println(action);
-                    
-                    if ("1".equals(action)) {
-                        int degats = Math.max(1, j2.getAttaque() - j1.getDefense());
-                        j1.recevoirDegats(degats);
-                        System.out.println("Vous infligez " + degats + " dégâts !");
-                    }
-                } else {
-                    System.out.println("\n--- Tour de l'adversaire ---");
-                    String actionAdv = in.readLine();
-                    
-                    if ("1".equals(actionAdv)) {
-                        int degats = Math.max(1, j1.getAttaque() - j2.getDefense());
-                        j2.recevoirDegats(degats);
-                        System.out.println("Vous subissez " + degats + " dégâts !");
-                    }
-                }
-                
-                tourJ1 = !tourJ1;
-                
-                String resultat = in.readLine();
-                if ("VICTOIRE".equals(resultat)) {
-                    System.out.println("\n*** Vous avez perdu ! ***");
-                    break;
-                } else if ("DEFAITE".equals(resultat)) {
-                    System.out.println("\n*** Vous avez gagné ! ***");
-                    break;
-                }
+
+    /* =========================
+       COMBAT PvP (CLIENT ONLY UI)
+       ========================= */
+
+    private void lancerCombat() throws IOException {
+        Scanner scanner = new Scanner(System.in);
+
+        while (true) {
+            String message = in.readLine();
+
+            if (message == null) break;
+
+            if ("DEBUT".equals(message)) {
+                System.out.println("\n⚔️  Le combat commence !");
             }
-        } catch (IOException e) {
-            System.err.println("Erreur de communication: " + e.getMessage());
+            else if ("TON_TOUR".equals(message)) {
+                System.out.println("\n--- Votre tour ---");
+                System.out.print("Action (1 = Attaquer) : ");
+                String action = scanner.nextLine();
+                out.println("ACTION " + action);
+            }
+            else if (message.startsWith("DEGATS")) {
+                int degats = Integer.parseInt(message.split(" ")[1]);
+                System.out.println("💥 Dégâts infligés : " + degats);
+
+                pvMoi = Integer.parseInt(in.readLine().split(" ")[1]);
+                pvAdversaire = Integer.parseInt(in.readLine().split(" ")[1]);
+
+                afficherEtat();
+            }
+            else if ("VICTOIRE".equals(message)) {
+                System.out.println("\n🏆 VICTOIRE !");
+                break;
+            }
+            else if ("DEFAITE".equals(message)) {
+                System.out.println("\n💀 DÉFAITE...");
+                break;
+            }
         }
     }
-    
+
+    private void afficherEtat() {
+        System.out.println("📊 PV Vous : " + pvMoi + " | PV Adversaire : " + pvAdversaire);
+    }
+
+    /* =========================
+       FERMETURE
+       ========================= */
+
     private void fermer() {
         try {
             if (in != null) in.close();
             if (out != null) out.close();
             if (socket != null) socket.close();
         } catch (IOException e) {
-            System.err.println("Erreur lors de la fermeture: " + e.getMessage());
+            System.err.println("Erreur fermeture : " + e.getMessage());
         }
     }
 }

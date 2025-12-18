@@ -37,6 +37,26 @@ public class Personnage {
         return pointsVieMax;
     }
     
+    public void setPointsVie(int pv) {
+        this.pointsVie = Math.max(0, Math.min(pv, pointsVieMax));
+    }
+
+    public void setAttaque(int attaque) {
+        this.attaque = attaque;
+    }
+
+    public void setDefense(int defense) {
+        this.defense = defense;
+    }
+
+    public void setPointsVieMax(int pvMax) {
+        this.pointsVieMax = pvMax;
+        if (pointsVie > pointsVieMax) {
+            pointsVie = pointsVieMax;
+        }
+    }
+
+    
     public int getAttaque() {
         int attaqueBase = attaque;
         if (inventaire.getArmeEquipee() != null) {
